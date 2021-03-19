@@ -48,13 +48,14 @@ world = {};
 function drawCircle(context,entity) {
     with(context) {
         beginPath();                
-        lineWidth = 3;
+        lineWidth = 5;
         var x = entity["x"];
         var y = entity["y"];
         //moveTo(x,y);
         fillStyle = entity["colour"];
         strokeStyle = fillStyle;
-        arc(x, y, (entity["radius"])?entity["radius"]:50, 0, 2.0 * Math.PI, false);  
+        // Changed it to look like C's which i think look better than O.
+        arc(x, y, (entity["radius"])?entity["radius"]:50, 1.0, 2.0 * Math.PI, false);  
         stroke();                                
     }
 }
@@ -124,7 +125,10 @@ function getPosition(e) {
 function addEntity(entity, data) {
     world[entity] = data;
     drawNextFrame(); // (but should we?)
-    //XXX: Send a XHTML Request that updates the entity you just modified!
+
+    // Send a msg through socket, so it can be propagated to all other clients and stored
+    // in the server side world
+    socket.send(JSON.stringify({[entity]: data}));
 }
 var counter = 0;
 function addEntityWithoutName(data) {
@@ -229,18 +233,17 @@ mouse = (function() {
 })();
 
 // Add the application specific mouse listeners!
-//XXX: TODO Make these prettier!
 mouse.mousedowners.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'blue'});
+    addEntityWithoutName({'x':x,'y':y,'colour':'silver'});
 });
 
 mouse.mouseuppers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'red'});
+    addEntityWithoutName({'x':x,'y':y,'colour':'gold'});
 });
 
 mouse.mousedraggers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'green',
-                          'radius':10});
+    addEntityWithoutName({'x':x,'y':y,'colour':'white',
+                          'radius':15});
 });
 
 
@@ -252,16 +255,37 @@ function update() {
 function wsSetup() {
     var url = "ws://"+host+"/subscribe";   
     socket = new WebSocket(url);
-    socket.onopen = function() {
-        //XXX: TODO What are you going to do here?
+    socket.onopen = function(event) {
+        // GEt the current state of the world?
+        console.log("WebSocket Connection is Open!");
+        fetch(`http://${host}/world`)
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+            })
+            .then(json => {
+                console.log(json);
+                world=json;
+                drawNextFrame();
+            })
+            .catch(err => {
+                console.log(err)
+            })
     };
     socket.onerror = function(msg) {
+        // Just log the error, not sure what else to do with this
         debug("WebSocket Error:" + msg.data);
     };
     socket.onmessage = function(msg) {  
         try {
             debug("WebSocket Recv:" + msg.data);
-            //XXX: TODO What are you going to do here?            
+            let recieved_message = JSON.parse(msg.data);
+            for (let entity in recieved_message) {
+                world[entity] = recieved_message[entity];
+                drawNextFrame();
+            }
+            
         } catch (e) {
             alert("socket on message: " + e);
         }
